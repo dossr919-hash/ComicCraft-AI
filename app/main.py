@@ -1,19 +1,28 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from pathlib import Path
-from app.routes import router
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import os, base64, uuid
+from app.ai.gemini_flash import generate_comic
 
-app = FastAPI(title="ComicCraft AI")
+app = FastAPI()
 
-# API routes mattum router la irunthu eduthukalam
-app.include_router(router)
+# Vercel la /tmp than writable
+STATIC_DIR = "/tmp/static" if os.path.exists("/var/task") else "app/static"
+os.makedirs(STATIC_DIR, exist_ok=True)
 
-# Homepage - direct-a file ah padichu anuppurom, template vendaam!
+templates = Jinja2Templates(directory="app/templates")
+
 @app.get("/", response_class=HTMLResponse)
-def home_page():
-    html_file = Path(__file__).parent / "templates" / "index.html"
-    return html_file.read_text(encoding="utf-8")
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.post("/generate")
+async def generate(request: Request):
+    data = await request.json()
+    story = data.get("story", "")
+    images = generate_comic(story) # this returns list
+    return {"images": images}
+
+# Vercel needs this
+# app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
